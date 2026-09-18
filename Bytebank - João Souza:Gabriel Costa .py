@@ -1,3 +1,5 @@
+from datetime import datetime
+
 #TAXA DE RENDIMENTO DOS COFRINHOS (0,5% AO MÊS, JUROS SIMPLES)
 TAXA_RENDIMENTO = 0.005
 
@@ -21,6 +23,7 @@ def exibir_menu():
     print("--- PIX E RELATÓRIOS ---")
     print("[10] Transferir via PIX")
     print("[11] Relatório de Gastos por Categoria")
+    print("[12] Extrato de Transações")
     print("[0] Sair")
     return input("> Digite a operação desejada: ")
 
@@ -50,6 +53,7 @@ def selecionar_categoria():
 #REGISTRO NO HISTÓRICO DO CLIENTE
 def registrar_movimentacao(cliente, tipo, valor, fluxo, categoria=None):
     cliente["historico"].append({
+        "data": datetime.now().strftime("%d/%m/%Y %H:%M"),
         "tipo": tipo,
         "valor": valor,
         "fluxo": fluxo,
@@ -332,6 +336,34 @@ def transferir_pix(clientes, cpf_origem):
     print(f"[SUCESSO] PIX de R$ {valor:.2f} enviado para {destino['nome']}.")
     print(f"[INFO] Novo saldo de {origem['nome']}: R$ {origem['saldo']:.2f}")
 
+#EXTRATO DE TRANSAÇÕES
+def exibir_extrato(cliente):
+    if not cliente["historico"]:
+        print(f"\n[AVISO] {cliente['nome']} ainda não tem movimentações.")
+        return
+
+    print(f"\n=== EXTRATO DE {cliente['nome'].upper()} ===")
+
+    for movimentacao in cliente["historico"]:
+
+        if movimentacao["fluxo"] == "entrada":
+            sinal = "+"
+        elif movimentacao["fluxo"] == "saida":
+            sinal = "-"
+        else:
+            sinal = "~"
+
+        descricao = movimentacao["tipo"]
+
+        if movimentacao["categoria"]:
+            descricao += f" ({movimentacao['categoria']})"
+
+        print(f"{movimentacao['data']} | {sinal} R$ {movimentacao['valor']:>9.2f} | {descricao}")
+
+    print(f"\nTotal de movimentações: {len(cliente['historico'])}")
+    print(f"Saldo atual na conta: R$ {cliente['saldo']:.2f}")
+    print("Legenda: (+) entrou  (-) saiu  (~) movimentação entre conta e cofrinho")
+
 #RELATÓRIO DE GASTOS POR CATEGORIA
 def relatorio_categoria(cliente):
     gastos_por_categoria = {}
@@ -453,6 +485,12 @@ def main():
 
             if cpf:
                 relatorio_categoria(clientes[cpf])
+        #EXTRATO DE TRANSAÇÕES
+        elif opcao == '12':
+            cpf = selecionar_cliente(clientes)
+
+            if cpf:
+                exibir_extrato(clientes[cpf])
         #EXIT
         elif opcao == '0':
             print("\nEncerrando o sistema ByteBank. Até logo!")
