@@ -2,7 +2,7 @@
 
 Sistema bancário de terminal desenvolvido em Python puro, sem bibliotecas externas.
 
-Projeto Prático Avaliativo AV2 da disciplina **BD015 (Algoritmo e Estrutura de Dados)** CESAR School, Prof. Fernando Ferreira de Carvalho. O sistema simula o core de uma fintech operado por um atendente do banco: múltiplas contas em memória, transferências PIX, cartão de crédito, cofrinhos, programa de pontos e as estruturas lineares de pilha e fila aplicadas a estorno e pagamentos.
+Projeto Prático Avaliativo AV2 da disciplina **BD015 (Algoritmo e Estrutura de Dados)** da CESAR School, ministrada pelo Prof. Fernando Ferreira de Carvalho. O sistema simula o core de uma fintech operado por um atendente do banco: múltiplas contas em memória, transferências PIX, cartão de crédito, cofrinhos, programa de pontos e as estruturas lineares de pilha e fila aplicadas a estorno e pagamentos.
 
 ## Squad
 
@@ -14,7 +14,7 @@ Projeto Prático Avaliativo AV2 da disciplina **BD015 (Algoritmo e Estrutura de 
 O projeto não precisa de compilação nem de instalação de dependências. Basta ter o **Python 3** instalado.
 
 ```bash
-python3 "Bytebank - João Souza:Gabriel Costa .py"
+python3 main.py
 ```
 
 Para conferir se o Python está disponível na máquina:
@@ -25,7 +25,7 @@ python3 --version
 
 Ao iniciar, o sistema exibe o menu de operações em loop contínuo. A navegação é feita digitando o número da operação desejada, e a opção `[0]` encerra o programa.
 
-> Os dados são mantidos em memória durante a execução. Ao encerrar o sistema, clientes, saldos e históricos são descartados.
+> A base de contas é gravada em `contas_bytebank.txt` após cada operação e restaurada automaticamente na próxima execução. Para começar do zero, basta apagar esse arquivo.
 
 ## Funcionalidades
 
@@ -58,6 +58,30 @@ Ao iniciar, o sistema exibe o menu de operações em loop contínuo. A navegaç�
 - **Cartão de crédito:** limite aprovado de R$ 2.000,00, compras que consomem limite sem tocar no saldo, consulta de fatura e pagamento total ou parcial que restabelece o limite
 - **BytePoints:** 1 ponto a cada R$ 10,00 em saques e transferências, resgatáveis em blocos de 100 pontos por R$ 5,00 de cashback
 
+### Persistência em TXT
+
+- `salvar_contas_txt(contas)` grava a base inteira em `contas_bytebank.txt`, uma linha por registro, com campos separados por `|`
+- `carregar_contas_txt()` lê o arquivo ao iniciar e reconstrói o dicionário de contas
+- Cada linha começa com o tipo do registro (`CONTA`, `COFRINHO`, `HISTORICO`, `BOLETO`, `COMPRA`) e o CPF do dono:
+
+```text
+CONTA|11111111111|Ana Souza|1001|850.0|ana@x.com|2000.0|80.0|35
+COFRINHO|11111111111|Viagem|300.0
+HISTORICO|11111111111|14/10/2026 16:51|PIX enviado|250.0|saida|Alimentação|22222222222
+BOLETO|11111111111|Conta de Luz|120.0|Contas
+```
+
+- As linhas são gravadas e lidas na ordem das listas, então a pilha do histórico e a fila de boletos voltam exatamente como estavam e o estorno continua funcionando depois de reiniciar
+- O salvamento é automático após cada operação. Fechar a janela não perde dados
+- Linhas corrompidas são ignoradas com aviso, sem derrubar o carregamento
+
+### Analisador de Log HTTP
+
+- A opção `[22]` lê um arquivo de log de servidor no formato padrão (`IP - - [data] "GET /pagina HTTP/1.1" 200 1234`) e conta as requisições **200 (Sucesso)** e **404 (Não Encontrado)**, com o percentual de cada uma
+- O código de status é extraído cortando a linha nas aspas: ele é o primeiro item depois da requisição
+- Linhas fora do formato são ignoradas e contabilizadas à parte
+- O repositório inclui `servidor.log` como exemplo. Basta apertar Enter no caminho para analisá-lo
+
 ## Mapa do menu
 
 | Opção | Operação |
@@ -71,6 +95,7 @@ Ao iniciar, o sistema exibe o menu de operações em loop contínuo. A navegaç�
 | 14 a 16 | Agendar boleto, ver fila, processar virada de lote (FIFO) |
 | 17 a 19 | Comprar no crédito, ver fatura, pagar fatura |
 | 20, 21 | Consultar BytePoints, resgatar cashback |
+| 22 | Analisar log HTTP do servidor |
 | 0 | Sair |
 
 ## Estruturas de dados
