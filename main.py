@@ -17,6 +17,10 @@ CASHBACK_POR_RESGATE = 5.0
 #CATEGORIAS DE GASTO DISPONÍVEIS
 CATEGORIAS = ["Alimentação", "Transporte", "Lazer", "Contas", "Outros"]
 
+#ARQUIVO TXT ONDE A BASE DE CONTAS É GRAVADA E SEPARADOR DOS CAMPOS DE CADA LINHA
+ARQUIVO_CONTAS = "contas_bytebank.txt"
+SEPARADOR = "|"
+
 #MENU INICIAL
 def exibir_menu():
     print("\n=== ByteBank MVP ===")
@@ -797,9 +801,119 @@ def estornar_ultima_transacao(clientes, cpf):
     print(f"[INFO] Novo saldo de {cliente['nome']}: R$ {formatar_real(cliente['saldo'])}")
     print(f"[INFO] Transações restantes na pilha: {len(cliente['historico'])}")
 
+#MONTA UMA LINHA DO ARQUIVO TXT A PARTIR DE UMA LISTA DE CAMPOS
+def montar_linha(campos):
+    textos = []
+
+    for campo in campos:
+        #NONE VIRA CAMPO VAZIO NO ARQUIVO
+        if campo is None:
+            campo = ""
+
+        #O SEPARADOR E A QUEBRA DE LINHA NÃO PODEM APARECER DENTRO DE UM CAMPO
+        textos.append(str(campo).replace(SEPARADOR, "/").replace("\n", " "))
+
+    return SEPARADOR.join(textos) + "\n"
+
+#LÊ UM CAMPO DO ARQUIVO: CAMPO VAZIO VOLTA A SER NONE
+def campo_ou_none(texto):
+    if texto == "":
+        return None
+
+    return texto
+
+#PERSISTÊNCIA: GRAVA A BASE DE CONTAS NO ARQUIVO TXT
+def salvar_contas_txt(contas):
+    try:
+        with open(ARQUIVO_CONTAS, "w", encoding="utf-8") as arquivo:
+
+            for cpf, dados in contas.items():
+                #CADA LINHA COMEÇA COM O TIPO DO REGISTRO E O CPF DO DONO
+                arquivo.write(montar_linha(["CONTA", cpf, dados["nome"], dados["numero_conta"], dados["saldo"], dados["chave_pix"], dados["limite_credito"], dados["saldo_fatura"], dados["pontos"]]))
+
+                for nome_caixinha, valor in dados["cofrinhos"].items():
+                    arquivo.write(montar_linha(["COFRINHO", cpf, nome_caixinha, valor]))
+
+                #AS LINHAS SAEM NA ORDEM DA LISTA: O TOPO DA PILHA CONTINUA SENDO O ÚLTIMO
+                for movimentacao in dados["historico"]:
+                    arquivo.write(montar_linha(["HISTORICO", cpf, movimentacao["data"], movimentacao["tipo"], movimentacao["valor"], movimentacao["fluxo"], movimentacao["categoria"], movimentacao["referencia"]]))
+
+                #E O INÍCIO DA FILA CONTINUA SENDO O PRIMEIRO
+                for boleto in dados["boletos"]:
+                    arquivo.write(montar_linha(["BOLETO", cpf, boleto["descricao"], boleto["valor"], boleto["categoria"]]))
+
+                for compra in dados["compras_credito"]:
+                    arquivo.write(montar_linha(["COMPRA", cpf, compra["data"], compra["estabelecimento"], compra["valor"], compra["categoria"]]))
+
+        return True
+
+    except OSError:
+        print(f"[ERRO] Não foi possível gravar o arquivo {ARQUIVO_CONTAS}. Os dados desta sessão não foram salvos.")
+        return False
+
+#PERSISTÊNCIA: RESTAURA A BASE DE CONTAS A PARTIR DO ARQUIVO TXT
+def carregar_contas_txt():
+    contas = {}
+
+    try:
+        with open(ARQUIVO_CONTAS, "r", encoding="utf-8") as arquivo:
+            linhas = arquivo.readlines()
+
+    except FileNotFoundError:
+        print(f"[INFO] Nenhuma base salva em {ARQUIVO_CONTAS}. O sistema inicia vazio.")
+        return contas
+
+    except OSError:
+        print(f"[ERRO] Não foi possível ler o arquivo {ARQUIVO_CONTAS}. O sistema inicia vazio.")
+        return contas
+
+    ignoradas = 0
+
+    for linha in linhas:
+
+        if linha.strip() == "":
+            continue
+
+        campos = linha.rstrip("\n").split(SEPARADOR)
+
+        #LINHA QUEBRADA OU DE CONTA INEXISTENTE É PULADA SEM DERRUBAR O CARREGAMENTO
+        try:
+            tipo = campos[0]
+            cpf = campos[1]
+
+            if tipo == "CONTA":
+                contas[cpf] = {"nome": campos[2], "numero_conta": campos[3], "saldo": float(campos[4]), "cofrinhos": {}, "chave_pix": campos[5], "historico": [], "boletos": [], "limite_credito": float(campos[6]), "saldo_fatura": float(campos[7]), "compras_credito": [], "pontos": int(campos[8])}
+
+            elif tipo == "COFRINHO":
+                contas[cpf]["cofrinhos"][campos[2]] = float(campos[3])
+
+            elif tipo == "HISTORICO":
+                #APPEND NA MESMA ORDEM DO ARQUIVO RECONSTRÓI A PILHA COMO ELA ESTAVA
+                contas[cpf]["historico"].append({"data": campos[2], "tipo": campos[3], "valor": float(campos[4]), "fluxo": campos[5], "categoria": campo_ou_none(campos[6]), "referencia": campo_ou_none(campos[7])})
+
+            elif tipo == "BOLETO":
+                contas[cpf]["boletos"].append({"descricao": campos[2], "valor": float(campos[3]), "categoria": campos[4]})
+
+            elif tipo == "COMPRA":
+                contas[cpf]["compras_credito"].append({"data": campos[2], "estabelecimento": campos[3], "valor": float(campos[4]), "categoria": campos[5]})
+
+            else:
+                ignoradas += 1
+
+        except (IndexError, KeyError, ValueError):
+            ignoradas += 1
+
+    print(f"[INFO] {len(contas)} conta(s) restaurada(s) de {ARQUIVO_CONTAS}.")
+
+    if ignoradas > 0:
+        print(f"[AVISO] {ignoradas} linha(s) com formato inválido foram ignoradas.")
+
+    return contas
+
 #CAIXA
 def main():
-    clientes = {}
+    #RESTAURA A BASE GRAVADA NA ÚLTIMA EXECUÇÃO
+    clientes = carregar_contas_txt()
 
     while True:
         opcao = exibir_menu()
@@ -951,11 +1065,17 @@ def main():
                     print("[ERRO] Informe um número inteiro de pontos.")
         #EXIT
         elif opcao == '0':
-            print("\nEncerrando o sistema ByteBank. Até logo!")
+            if salvar_contas_txt(clientes):
+                print(f"\n[INFO] Base de contas salva em {ARQUIVO_CONTAS}.")
+
+            print("Encerrando o sistema ByteBank. Até logo!")
             break
 
         else:
             print("\n[ERRO] Opção inválida. Escolha uma das opções do menu.")
+
+        #SALVAMENTO AUTOMÁTICO APÓS CADA OPERAÇÃO: FECHAR A JANELA NÃO PERDE DADOS
+        salvar_contas_txt(clientes)
 
 if __name__ == "__main__":
     print("Inicializando o Sistema...")
