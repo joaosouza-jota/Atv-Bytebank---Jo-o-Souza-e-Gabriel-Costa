@@ -21,6 +21,9 @@ CATEGORIAS = ["Alimentação", "Transporte", "Lazer", "Contas", "Outros"]
 ARQUIVO_CONTAS = "contas_bytebank.txt"
 SEPARADOR = "|"
 
+#ARQUIVO DE LOG DO SERVIDOR ANALISADO QUANDO O ATENDENTE NÃO INFORMA OUTRO
+ARQUIVO_LOG_PADRAO = "servidor.log"
+
 #MENU INICIAL
 def exibir_menu():
     print("\n=== ByteBank MVP ===")
@@ -51,6 +54,8 @@ def exibir_menu():
     print("[14] Agendar Boleto")
     print("[15] Ver Fila de Boletos")
     print("[16] Processar Fila / Virada de Lote (FIFO)")
+    print("--- MONITORAMENTO ---")
+    print("[22] Analisar Log HTTP do Servidor")
     print("[0] Sair")
     return input("> Digite a operação desejada: ")
 
@@ -910,6 +915,68 @@ def carregar_contas_txt():
 
     return contas
 
+#ANALISADOR DE LOG HTTP: CONTA AS REQUISIÇÕES 200 (SUCESSO) E 404 (NÃO ENCONTRADO)
+def analisar_log_http(caminho):
+    try:
+        with open(caminho, "r", encoding="utf-8", errors="replace") as arquivo:
+            linhas = arquivo.readlines()
+
+    except FileNotFoundError:
+        print(f"[ERRO] Arquivo de log '{caminho}' não encontrado.")
+        return None
+
+    except OSError:
+        print(f"[ERRO] Não foi possível ler o arquivo de log '{caminho}'.")
+        return None
+
+    sucesso = 0
+    nao_encontrado = 0
+    outros_codigos = 0
+    ignoradas = 0
+
+    for linha in linhas:
+
+        if linha.strip() == "":
+            continue
+
+        #FORMATO PADRÃO: IP - - [DATA] "GET /pagina HTTP/1.1" 200 1234
+        #CORTANDO NAS ASPAS, O CÓDIGO DE STATUS É O PRIMEIRO ITEM DEPOIS DA REQUISIÇÃO
+        partes = linha.split('"')
+
+        if len(partes) < 3:
+            ignoradas += 1
+            continue
+
+        depois_da_requisicao = partes[2].split()
+
+        if not depois_da_requisicao or not depois_da_requisicao[0].isdigit():
+            ignoradas += 1
+            continue
+
+        codigo = depois_da_requisicao[0]
+
+        if codigo == "200":
+            sucesso += 1
+        elif codigo == "404":
+            nao_encontrado += 1
+        else:
+            outros_codigos += 1
+
+    total = sucesso + nao_encontrado + outros_codigos
+
+    print(f"\n=== ANÁLISE DO LOG: {caminho} ===")
+    print(f"Requisições lidas: {total}")
+
+    if total > 0:
+        print(f"[200] Sucesso: {sucesso} ({sucesso / total * 100:.1f}%)")
+        print(f"[404] Não Encontrado: {nao_encontrado} ({nao_encontrado / total * 100:.1f}%)")
+        print(f"Outros códigos: {outros_codigos}")
+
+    if ignoradas > 0:
+        print(f"[AVISO] {ignoradas} linha(s) fora do formato de log foram ignoradas.")
+
+    return {"200": sucesso, "404": nao_encontrado}
+
 #CAIXA
 def main():
     #RESTAURA A BASE GRAVADA NA ÚLTIMA EXECUÇÃO
@@ -1063,6 +1130,14 @@ def main():
                     resgatar_cashback(clientes[cpf], pontos)
                 except ValueError:
                     print("[ERRO] Informe um número inteiro de pontos.")
+        #ANALISAR LOG HTTP
+        elif opcao == '22':
+            caminho = input(f"> Caminho do arquivo de log (Enter para '{ARQUIVO_LOG_PADRAO}'): ").strip()
+
+            if caminho == "":
+                caminho = ARQUIVO_LOG_PADRAO
+
+            analisar_log_http(caminho)
         #EXIT
         elif opcao == '0':
             if salvar_contas_txt(clientes):
